@@ -2,69 +2,85 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_openai import ChatOpenAI
 from config.settings import settings
-from .tools import quadro_de_horario_tool, rota_tool, faq_tool, status_onibus_tool, previsao_chegada_tool, sugestoes_contextuais_tool
+from .tools import (
+    quadro_de_horario_tool,
+    rota_tool,
+    faq_tool,
+    status_onibus_tool,
+    previsao_chegada_tool,
+    sugestoes_contextuais_tool,
+)
 
-def create_agent():
+
+def create_agent(include_suggestions: bool = True):
     """Cria e configura o agente de chat."""
-    # Define as ferramentas disponíveis
-    tools = [quadro_de_horario_tool, rota_tool, faq_tool, status_onibus_tool, previsao_chegada_tool, sugestoes_contextuais_tool]
-    # Configura o modelo de linguagem
+
+    tools = [
+        quadro_de_horario_tool,
+        rota_tool,
+        faq_tool,
+        status_onibus_tool,
+        previsao_chegada_tool,
+    ]
+
+    if include_suggestions:
+        tools.append(sugestoes_contextuais_tool)
+
     llm = ChatOpenAI(
         api_key=settings.OPENAI_API_KEY,
-        model_name="gpt-3.5-turbo",
-        temperature=0
+        model_name="gpt-4o-mini",
+        temperature=0,
     )
-    print(settings.OPENAI_API_KEY)
-    
-    # Define o template do prompt
+
+    if include_suggestions:
+        suggestion_instruction =        """
+        Use a ferramenta `sugestoes_contextuais_tool` apenas se isso realmente agregar valor.
+        Nunca substitua a resposta principal pelas sugestões.
+        """
+        #Após responder a dúvida do usuário, você pode sugerir até 2 funcionalidades complementares úteis.
+    else:
+        suggestion_instruction = """
+        Não gere sugestões complementares. Responda apenas à pergunta principal do usuário usando a ferramenta adequada.
+        """
+
     prompt = ChatPromptTemplate.from_messages([
-        ("system", """
-        Você é um assistente especializado no transporte público de São Paulo. 
-        Siga o padrão ReAct para resolver cada solicitação: 
+        ("system", f"""
+        Você é um assistente especializado no transporte público de São Paulo.
 
-        1️⃣ **Pense**: analise a pergunta e descreva seu raciocínio.  
-        2️⃣ **Aja**: escolha a ferramenta mais adequada.  
-        3️⃣ **Observe**: use o resultado da ferramenta.  
-        4️⃣ **Responda**: formule a resposta final de forma simpática e clara.  
-        5️⃣ **Sugira**: pense no que mais o usuário pode precisar e chame a ferramenta `sugestoes_contextuais_tool`.
-
-        ⚠️ Nunca pule etapas. Se tiver dúvida, peça mais informações ao usuário.
-
-         Após responder a dúvida do usuário, sempre pense no que mais ele pode querer e chame a ferramenta `sugestoes_contextuais_tool`, informando a pergunta original e sua resposta.
-        
-        Use as seguintes ferramentas de acordo com a necessidade:
-        - faq_tool: Para responder perguntas gerais sobre o sistema
-        - quadro_de_horario_tool: Para consultar horários específicos de linhas. 
-        - rota_tool: Para fornecer informações sobre trajetos
+        Use as ferramentas de acordo com a necessidade:
+        - faq_tool: Para responder perguntas gerais sobre o sistema.
+        - quadro_de_horario_tool: Para consultar horários específicos de linhas.
+        - rota_tool: Para fornecer informações sobre trajetos.
         - status_onibus_tool: Para gerar o link do Olho Vivo com o mapa da linha de ônibus.
         - previsao_chegada_tool: Para informar o tempo de chegada do próximo ônibus em uma parada.
-        - sugestoes_contextuais_tool: para sugerir mais ferramentas ao usuário.
-         
 
-         
-        Mantenha suas respostas:
-        1. Simpáticas e claras
-        2. Focadas no contexto de transporte público
-        3. Úteis e práticas para o usuário
-        4. Seja bastante simpático, use emojis para mostrar simpatia de acordo com contexto.
-        5. nunca invente respostar, basei-se nos dados.
-        Se não tiver certeza sobre alguma informação, peça esclarecimentos.
+        Regras:
+        1. Responda de forma clara, objetiva e amigável.
+        2. Use apenas dados retornados pelas ferramentas.
+        3. Não invente informações.
+        4. Se não encontrar a informação, diga que não encontrou.
+        5. A resposta principal deve conter o resultado da ferramenta adequada.
+
+        {suggestion_instruction}
         """),
         MessagesPlaceholder("chat_history", optional=True),
         ("human", "{input}"),
-        MessagesPlaceholder("agent_scratchpad")
+        MessagesPlaceholder("agent_scratchpad"),
     ])
-    
-    # Cria o agente
+
     agent = create_openai_tools_agent(llm, tools, prompt)
-    
-    # Cria o executor do agente
+
     return AgentExecutor(
         agent=agent,
         tools=tools,
         verbose=True,
-        handle_parsing_errors=True
+        handle_parsing_errors=True,
+        return_intermediate_steps=True,
     )
 
-# Cria uma instância do agente
-agent_executor = create_agent()
+
+# Executor normal da aplicação
+agent_executor = create_agent(include_suggestions=True)
+
+# Executor específico para avaliação
+agent_executor_eval = create_agent(include_suggestions=False)

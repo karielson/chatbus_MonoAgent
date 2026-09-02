@@ -9,6 +9,7 @@ from config.settings import settings
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
+
 llm_sugestao = ChatOpenAI(
     api_key=settings.OPENAI_API_KEY,
     model_name="gpt-3.5-turbo",
@@ -23,11 +24,11 @@ Você é um assistente de transporte público de São Paulo.
 Depois de responder a uma pergunta do usuário, seu objetivo é pensar em até 2 funcionalidades extras que o usuário pode querer usar, com base na pergunta e na resposta.
 
 Funcionalidades disponíveis:
-- Consultar horários de ônibus
 - Ver previsão de chegada de um ônibus em uma parada
+- Fazer perguntas gerais sobre o sistema
+- Consultar horários de ônibus
 - Gerar trajeto entre dois pontos
 - Ver localização dos ônibus no mapa (Olho Vivo)
-- Fazer perguntas gerais sobre o sistema
 - Ativar modo iniciante (ensinar como usar o transporte público)
 
 Se não houver nada útil para sugerir, retorne uma string vazia.
@@ -50,8 +51,10 @@ def sugestoes_contextuais_tool(pergunta: str, resposta: str) -> str:
 
 @tool
 def quadro_de_horario_tool(linha: str, dia: str|None) -> str:
+
     """Informa os horários de partidas da linha de ônibus. sempre informar todos os horários e explicar que se refere a saída do terminal.
     Se o usuário solicitar informações do domingo o parametro dia deve ser 2, se sábado dia deve ser 1, se um dia útil dia deve ser 0, não informar nada dia recebe none"""
+
     linhas = sptrans.buscar_linha(linha)
     
     if not linhas:
@@ -75,7 +78,10 @@ def rota_tool(origem: str = None, destino: str = None, preferencia: str = None) 
       - 'rapida' => rota mais curta em tempo
       - 'menos_baldeacoes' => rota com menos conexões de ônibus
       - 'menos_caminhada' => rota com menos caminhada, etc.
+      obs.: se o usuário não informar a preferencia coloque 'rapida'
+      obs.: envie pro usuário exatamente como na descrição do Google Maps.
     """
+
     if not destino:
         return "Por favor, informe o endereço de destino ou compartilhe sua localização."
 
@@ -98,7 +104,9 @@ def rota_tool(origem: str = None, destino: str = None, preferencia: str = None) 
 
 @tool
 def faq_tool(pergunta: str) -> str:
-    """Responde perguntas gerais """
+    """Responde perguntas gerais 
+    seja fiel à resposta do FAQ, não invente informações, e dê a informação completa"""
+
     respostas = search_faq(pergunta)  # Retorna até 2 respostas relevantes
 
     if not respostas:
@@ -119,6 +127,7 @@ def status_onibus_tool(linha: str = None, sentido: str = None) -> str:
     Envia o link do mapa do Olho Vivo com a posição dos ônibus da linha especificada.
     Caso o sentido não seja informado, sugere as opções disponíveis.
     """
+
     if not linha:
         return "Por favor, informe o número ou nome da linha para que eu possa gerar o link."
 
@@ -175,6 +184,7 @@ def previsao_chegada_tool(linha: str = None, parada: str = None) -> str:
     """
     Informa o tempo restante para o próximo ônibus de uma linha específica passar na parada informada.
     Caso alguma informação esteja faltando (linha ou parada), solicita os dados ao usuário.
+    SEMPRE INFORME TODOS OS HORÁRIOS DA LISTA DE HORÁRIOS
     """
 
     # Verificação da Linha
